@@ -1,0 +1,13 @@
+# Mac crap
+.DS_Store
+
+#vscode
+.vscode/
+.vs/
+.idea/
+
+#build
+Debug/
+x64/
+*.vcxproj.filters
+*.vcxproj.user
