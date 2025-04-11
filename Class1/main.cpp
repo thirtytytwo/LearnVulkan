@@ -38,19 +38,19 @@ private:
 		window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
 	}
 	//挑战，检测当前需要的extension是否支持
-	bool CheckExtensionsSupport(const char** extension, uint32_t count)
+	bool CheckExtensionsSupport(std::vector<const char*> extensions)
 	{
 		uint32_t supportExtensionCount = 0;
 		vkEnumerateInstanceExtensionProperties(nullptr, &supportExtensionCount, nullptr);
 		std::vector<VkExtensionProperties> supportExtensions(supportExtensionCount);
 		vkEnumerateInstanceExtensionProperties(nullptr, &supportExtensionCount, supportExtensions.data());
 	
-		for (int i = 0; i < count; i++)
+		for (const auto& extension : extensions)
 		{
 			bool extensionFound = false;
 			for (const auto& supportExtension : supportExtensions)
 			{
-				if (strcmp(extension[i], supportExtension.extensionName) == 0)
+				if (strcmp(extension, supportExtension.extensionName) == 0)
 				{
 					extensionFound = true;
 					break;
@@ -87,6 +87,23 @@ private:
 
 		return true;
 	}
+	std::vector<const char*> GetRequiredExtensions()
+	{
+		uint32_t glfwExtensionCount = 0;
+		const char** glfwExtensions;
+
+		//获取glfw需要的extension
+		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+		std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+		if (enableValidationLayers)
+		{
+			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+		}
+
+		return extensions;
+	}
 	void CreateInstance()
 	{
 		if (enableValidationLayers && !CheckValidationLayerSupport())
@@ -105,19 +122,14 @@ private:
 		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		createInfo.pApplicationInfo = &appInfo;
 
-		uint32_t glfwExtensionCount = 0;
-		const char** glfwExtensions;
+		auto extensions = GetRequiredExtensions();
 
-		//只知道这里是获取glfw对应的extension，让vulkan知道我们用的是这个system
-		//至于extension的具体作用和具体的意义目前不知道
-		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-		if (!CheckExtensionsSupport(glfwExtensions, glfwExtensionCount))
+		if (!CheckExtensionsSupport(extensions))
 		{
 			throw std::runtime_error("failed to load extensions");
 		}
-		createInfo.enabledExtensionCount = glfwExtensionCount;
-		createInfo.ppEnabledExtensionNames = glfwExtensions;
+		createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+		createInfo.ppEnabledExtensionNames = extensions.data();
 
 		if (enableValidationLayers)
 		{
@@ -133,9 +145,15 @@ private:
 			throw std::runtime_error("failed to create instance!");
 		}
 	}
+	void SetupDebugMessenger()
+	{
+		if (!enableValidationLayers) return;
+	}
 	void InitVulkan()
 	{
 		CreateInstance();
+		SetupDebugMessenger();
+
 	}
 	void MainLoop()
 	{
@@ -153,8 +171,15 @@ private:
 		glfwTerminate();
 	}
 
-	GLFWwindow* window;
-	VkInstance instance;
+	static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
+		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,//这里是存储信息等级，有纯信息，警告，报错
+		VkDebugUtilsMessageTypeFlagsEXT messageType,//这里存储的是行为，正常的行为，违反了规定的行为，潜在对vulkan非最优使用的行为
+		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,//细节数据
+		void* pUserData)//自定义的地方
+	{
+		std::cerr << "validation layer:" << pCallbackData->pMessage << std::endl;
+		return VK_FALSE;
+	}
 };
 
 int main()
