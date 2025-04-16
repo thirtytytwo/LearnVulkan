@@ -156,10 +156,12 @@ private:
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
 		createInfo.ppEnabledExtensionNames = extensions.data();
 
-		VkDebugUtilsMessengerCreateInfoEXT debugInfo{};
+		VkDebugUtilsMessengerCreateInfoEXT debugInfo;
 		if (enableValidationLayers)
 		{
-			createInfo.enabledExtensionCount = static_cast<uint32_t>(validationLayers.size());
+			//错误修复，之前在这里错写成了ExtensionCount，要记住LayerCount是负责Debug的
+			//Extension则是负责实际需要SDK支持的窗口功能类似
+			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
 			createInfo.ppEnabledLayerNames = validationLayers.data();
 
 			PopulateDebugMessengerCreateInfo(debugInfo);
@@ -180,20 +182,23 @@ private:
 	}
 	void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo)
 	{
-		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+		createInfo = {};
+		createInfo.sType = 
+			VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+		createInfo.messageSeverity = 
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-		createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
-			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+		createInfo.messageType =
+			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 		createInfo.pfnUserCallback = DebugCallback;
-		createInfo.pUserData = nullptr;
 	}
 	void SetupDebugMessenger()
 	{
 		if (!enableValidationLayers) return;
-		VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+		VkDebugUtilsMessengerCreateInfoEXT createInfo;
 		PopulateDebugMessengerCreateInfo(createInfo);
 
 		if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) 
@@ -233,7 +238,10 @@ private:
 		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,//细节数据
 		void* pUserData)//自定义的地方
 	{
-		std::cerr << "validation layer:" << pCallbackData->pMessage << std::endl;
+		if(messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+		{
+			std::cerr << "validation layer:" << pCallbackData->pMessage << std::endl;
+		}
 		return VK_FALSE;
 	}
 
