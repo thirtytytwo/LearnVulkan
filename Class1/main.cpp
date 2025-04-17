@@ -54,6 +54,7 @@ public:
 		Cleanup();
 	}
 private:
+	//初始化窗口
 	void InitWindow()
 	{
 		glfwInit();
@@ -62,7 +63,7 @@ private:
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 		window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
 	}
-	//挑战，检测当前需要的extension是否支持
+	//挑战，检测当前需要的拓展是否支持
 	bool CheckExtensionsSupport(std::vector<const char*> extensions)
 	{
 		uint32_t supportExtensionCount = 0;
@@ -85,6 +86,7 @@ private:
 		}
 		return true;
 	}
+	//检查Debug层级支持
 	bool CheckValidationLayerSupport()
 	{
 		uint32_t layerCount;
@@ -112,6 +114,7 @@ private:
 
 		return true;
 	}
+	//获得glfw所需要的拓展，还有debug拓展
 	std::vector<const char*> GetRequiredExtensions()
 	{
 		uint32_t glfwExtensionCount = 0;
@@ -129,6 +132,7 @@ private:
 
 		return extensions;
 	}
+	//生成vulkan实例
 	void CreateInstance()
 	{
 		if (enableValidationLayers && !CheckValidationLayerSupport())
@@ -155,7 +159,7 @@ private:
 		}
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
 		createInfo.ppEnabledExtensionNames = extensions.data();
-
+		
 		VkDebugUtilsMessengerCreateInfoEXT debugInfo;
 		if (enableValidationLayers)
 		{
@@ -206,11 +210,52 @@ private:
 			throw std::runtime_error("failed to set up debug messenger!");
 		}
 	}
+	void PickPhysicalDevice()
+	{
+		uint32_t deviceCount = 0;
+		vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+		if (deviceCount == 0)
+		{
+			throw std::runtime_error("failed to find GPUs with Vulkan support!");
+		}
+
+		std::vector<VkPhysicalDevice> devices(deviceCount);
+		vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+		for (const auto& device : devices)
+		{
+			if (IsDeviceSuitable(device))
+			{
+				physicalDevice = device;
+				break;
+			}
+		}
+
+		if (physicalDevice == VK_NULL_HANDLE)
+		{
+			throw std::runtime_error("failed to find a suitable GPU!");
+		}
+
+	}
+	bool IsDeviceSuitable(VkPhysicalDevice device)
+	{
+		VkPhysicalDeviceProperties deviceProperties;
+		vkGetPhysicalDeviceProperties(device, &deviceProperties);
+		VkPhysicalDeviceFeatures deviceFeatures;
+		vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+		
+		//这里的properties可以选一些硬件的信息，比如显卡的api，类型，是n卡还是a卡
+		//feature就是选那些功能，比如geometry shader
+		return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
+			deviceFeatures.geometryShader;
+	}
 	void InitVulkan()
 	{
+		//生成vulkan实例，并生成debug消息管理
 		CreateInstance();
 		SetupDebugMessenger();
-
+		//在做完vulkanInstance的相关初始化后，就需要对图形硬件做初始化，支持什么feature需要在这里声明
+		PickPhysicalDevice();
 	}
 	void MainLoop()
 	{
@@ -248,6 +293,7 @@ private:
 	GLFWwindow* window;
 	VkInstance instance;
 	VkDebugUtilsMessengerEXT debugMessenger;
+	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 };
 
 int main()
