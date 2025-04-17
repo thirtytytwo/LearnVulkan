@@ -48,6 +48,11 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 struct QueueFamilyIndices
 {
 	 std::optional<uint32_t> graphicsFamily;
+
+	 bool IsComplete()
+	 {
+		 return graphicsFamily.has_value();
+	 }
 };
 class HelloTriangleApplication
 {
@@ -245,15 +250,19 @@ private:
 	}
 	bool IsDeviceSuitable(VkPhysicalDevice device)
 	{
-		VkPhysicalDeviceProperties deviceProperties;
-		vkGetPhysicalDeviceProperties(device, &deviceProperties);
-		VkPhysicalDeviceFeatures deviceFeatures;
-		vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-		
-		//这里的properties可以选一些硬件的信息，比如显卡的api，类型，是n卡还是a卡
-		//feature就是选那些功能，比如geometry shader
-		return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
-			deviceFeatures.geometryShader;
+		QueueFamilyIndices indices = FindQueueFamilies(device);
+
+		return indices.IsComplete();
+		//只要支持图形队列就可以了，下面的设备类型检查都可以忽略掉
+		//VkPhysicalDeviceProperties deviceProperties;
+		//vkGetPhysicalDeviceProperties(device, &deviceProperties);
+		//VkPhysicalDeviceFeatures deviceFeatures;
+		//vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+		//
+		////这里的properties可以选一些硬件的信息，比如显卡的api，类型，是n卡还是a卡
+		////feature就是选那些功能，比如geometry shader
+		//return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
+		//	deviceFeatures.geometryShader;
 	}
 	void InitVulkan()
 	{
@@ -262,6 +271,8 @@ private:
 		SetupDebugMessenger();
 		//在做完vulkanInstance的相关初始化后，就需要对图形硬件做初始化，支持什么feature需要在这里声明
 		PickPhysicalDevice();
+		//创建逻辑设备
+		CreateLogicalDevice();
 	}
 	void MainLoop()
 	{
@@ -286,7 +297,37 @@ private:
 	{
 		QueueFamilyIndices indices;
 
+		uint32_t queueFamilyCount = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+		std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+		int i = 0;
+		for (const auto& queueFamily : queueFamilies)
+		{
+			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+			{
+				indices.graphicsFamily = i;
+			}
+			if (indices.IsComplete())
+			{
+				break;
+			}
+			i++;
+		}
+
 		return indices;
+	}
+
+	void CreateLogicalDevice()
+	{
+		QueueFamilyIndices indices = FindQueueFamilies(physicalDevice);
+
+		VkDeviceQueueCreateInfo queueCreateInfo{};
+		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+		queueCreateInfo.queueCount = 1;
 	}
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
@@ -306,6 +347,7 @@ private:
 	VkInstance instance;
 	VkDebugUtilsMessengerEXT debugMessenger;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+	VkDevice logicDevice;
 };
 
 int main()
