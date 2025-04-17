@@ -1,6 +1,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <optional>
 #include <iostream>
 #include <vector>
 #include <stdexcept>
@@ -43,6 +44,11 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 		func(instance, debugMessenger, pAllocator);
 	}
 }
+
+struct QueueFamilyIndices
+{
+	 std::optional<uint32_t> graphicsFamily;
+};
 class HelloTriangleApplication
 {
 public:
@@ -230,6 +236,12 @@ private:
 		glfwDestroyWindow(window);
 		
 		glfwTerminate();
+	}
+	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device)
+	{
+		QueueFamilyIndices indices;
+
+		return indices;
 	}
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
