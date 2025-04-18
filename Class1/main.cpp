@@ -242,6 +242,7 @@ private:
 			}
 		}
 
+
 		if (physicalDevice == VK_NULL_HANDLE)
 		{
 			throw std::runtime_error("failed to find a suitable GPU!");
@@ -253,16 +254,6 @@ private:
 		QueueFamilyIndices indices = FindQueueFamilies(device);
 
 		return indices.IsComplete();
-		//只要支持图形队列就可以了，下面的设备类型检查都可以忽略掉
-		//VkPhysicalDeviceProperties deviceProperties;
-		//vkGetPhysicalDeviceProperties(device, &deviceProperties);
-		//VkPhysicalDeviceFeatures deviceFeatures;
-		//vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-		//
-		////这里的properties可以选一些硬件的信息，比如显卡的api，类型，是n卡还是a卡
-		////feature就是选那些功能，比如geometry shader
-		//return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
-		//	deviceFeatures.geometryShader;
 	}
 	void InitVulkan()
 	{
@@ -283,6 +274,8 @@ private:
 	}
 	void Cleanup()
 	{
+		vkDestroyDevice(device, nullptr);
+
 		if (enableValidationLayers)
 		{
 			DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
@@ -328,6 +321,38 @@ private:
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
 		queueCreateInfo.queueCount = 1;
+		//queue是用于存储指令的地方，不同的queue存储不同类型的指令，那么执行需要先后顺序，所以要在这里指定它的优先级
+		float queuePriority = 1.0f;
+		queueCreateInfo.pQueuePriorities = &queuePriority;
+
+		VkPhysicalDeviceFeatures deviceFeature{};
+
+		VkDeviceCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+		createInfo.pQueueCreateInfos = &queueCreateInfo;
+		createInfo.queueCreateInfoCount = 1;
+		createInfo.pEnabledFeatures = &deviceFeature;
+
+		//这个DeviceCreateInfo和InstanceCreateInfo同样需要拓展和debug层级信息，不同的是现在这个是针对设备的
+		//在vulkan的更新中，这里的validation layer其实已经被废弃不需要了，但是为了严谨这里还是会赋值
+		createInfo.enabledExtensionCount = 0;
+		
+		if (enableValidationLayers)
+		{
+			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+			createInfo.ppEnabledLayerNames = validationLayers.data();
+		}
+		else
+		{
+			createInfo.enabledLayerCount = 0;
+		}
+
+		if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS)
+		{
+			throw std::runtime_error("failed to create logical device");
+		}
+
+		vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
 	}
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
@@ -347,7 +372,8 @@ private:
 	VkInstance instance;
 	VkDebugUtilsMessengerEXT debugMessenger;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-	VkDevice logicDevice;
+	VkDevice device;//其实是逻辑Device
+	VkQueue graphicsQueue;
 };
 
 int main()
