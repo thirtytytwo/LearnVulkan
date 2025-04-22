@@ -48,10 +48,11 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 struct QueueFamilyIndices
 {
 	 std::optional<uint32_t> graphicsFamily;
+	 std::optional<uint32_t> presentFamily;
 
 	 bool IsComplete()
 	 {
-		 return graphicsFamily.has_value();
+		 return graphicsFamily.has_value() && presentFamily.has_value();
 	 }
 };
 class HelloTriangleApplication
@@ -74,6 +75,91 @@ private:
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 		window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
 	}
+
+#pragma region Vulkan 初始化
+	void InitVulkan()
+	{
+		//生成vulkan实例，并生成debug消息管理
+		CreateInstance();
+		SetupDebugMessenger();
+		//Vulkan的窗口object，需在物理设备前绑定
+		CreateSurface();
+		//在做完vulkanInstance的相关初始化后，就需要对图形硬件做初始化，支持什么feature需要在这里声明
+		PickPhysicalDevice();
+		//创建逻辑设备
+		CreateLogicalDevice();
+	}
+	//初始化实例6 
+	void CreateInstance()
+	{
+		if (enableValidationLayers && !CheckValidationLayerSupport())
+		{
+			throw std::runtime_error("validation layers requested, but not available!");
+		}
+		VkApplicationInfo appInfo{};
+		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+		appInfo.pApplicationName = "Hello Triangle";
+		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+		appInfo.pEngineName = "No Engine";
+		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+		appInfo.apiVersion = VK_API_VERSION_1_0;
+
+		VkInstanceCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+		createInfo.pApplicationInfo = &appInfo;
+
+		auto extensions = GetRequiredExtensions();
+
+		if (!CheckExtensionsSupport(extensions))
+		{
+			throw std::runtime_error("failed to load extensions");
+		}
+		createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+		createInfo.ppEnabledExtensionNames = extensions.data();
+
+		VkDebugUtilsMessengerCreateInfoEXT debugInfo;
+		if (enableValidationLayers)
+		{
+			//错误修复，之前在这里错写成了ExtensionCount，要记住LayerCount是负责Debug的
+			//Extension则是负责实际需要SDK支持的窗口功能类似
+			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+			createInfo.ppEnabledLayerNames = validationLayers.data();
+
+			PopulateDebugMessengerCreateInfo(debugInfo);
+			createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugInfo;
+		}
+		else
+		{
+			createInfo.enabledLayerCount = 0;
+			createInfo.pNext = nullptr;
+		}
+
+		//这里VkResult 就只是是否Create成功的属性
+		//VkResult result = vkCreateInstance(&createInfo, nullptr, &instance);
+		if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS)
+		{
+			throw std::runtime_error("failed to create instance!");
+		}
+	}
+#pragma region 拓展 debug
+	//获得glfw所需要的拓展，还有debug拓展
+	std::vector<const char*> GetRequiredExtensions()
+	{
+		uint32_t glfwExtensionCount = 0;
+		const char** glfwExtensions;
+
+		//获取glfw需要的extension
+		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+		std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+		if (enableValidationLayers)
+		{
+			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+		}
+
+		return extensions;
+	}
 	//挑战，检测当前需要的拓展是否支持
 	bool CheckExtensionsSupport(std::vector<const char*> extensions)
 	{
@@ -81,7 +167,7 @@ private:
 		vkEnumerateInstanceExtensionProperties(nullptr, &supportExtensionCount, nullptr);
 		std::vector<VkExtensionProperties> supportExtensions(supportExtensionCount);
 		vkEnumerateInstanceExtensionProperties(nullptr, &supportExtensionCount, supportExtensions.data());
-	
+
 		for (const auto& extension : extensions)
 		{
 			bool extensionFound = false;
@@ -125,82 +211,12 @@ private:
 
 		return true;
 	}
-	//获得glfw所需要的拓展，还有debug拓展
-	std::vector<const char*> GetRequiredExtensions()
-	{
-		uint32_t glfwExtensionCount = 0;
-		const char** glfwExtensions;
-
-		//获取glfw需要的extension
-		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-		std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-		if (enableValidationLayers)
-		{
-			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-		}
-
-		return extensions;
-	}
-	//生成vulkan实例
-	void CreateInstance()
-	{
-		if (enableValidationLayers && !CheckValidationLayerSupport())
-		{
-			throw std::runtime_error("validation layers requested, but not available!");
-		}
-		VkApplicationInfo appInfo{};
-		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-		appInfo.pApplicationName = "Hello Triangle";
-		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-		appInfo.pEngineName = "No Engine";
-		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-		appInfo.apiVersion = VK_API_VERSION_1_0;
-
-		VkInstanceCreateInfo createInfo{};
-		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-		createInfo.pApplicationInfo = &appInfo;
-
-		auto extensions = GetRequiredExtensions();
-
-		if (!CheckExtensionsSupport(extensions))
-		{
-			throw std::runtime_error("failed to load extensions");
-		}
-		createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-		createInfo.ppEnabledExtensionNames = extensions.data();
-		
-		VkDebugUtilsMessengerCreateInfoEXT debugInfo;
-		if (enableValidationLayers)
-		{
-			//错误修复，之前在这里错写成了ExtensionCount，要记住LayerCount是负责Debug的
-			//Extension则是负责实际需要SDK支持的窗口功能类似
-			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-			createInfo.ppEnabledLayerNames = validationLayers.data();
-
-			PopulateDebugMessengerCreateInfo(debugInfo);
-			createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugInfo;
-		}
-		else
-		{
-			createInfo.enabledLayerCount = 0;
-			createInfo.pNext = nullptr;
-		}
-
-		//这里VkResult 就只是是否Create成功的属性
-		//VkResult result = vkCreateInstance(&createInfo, nullptr, &instance);
-		if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS)
-		{
-			throw std::runtime_error("failed to create instance!");
-		}
-	}
 	void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo)
 	{
 		createInfo = {};
-		createInfo.sType = 
+		createInfo.sType =
 			VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		createInfo.messageSeverity = 
+		createInfo.messageSeverity =
 			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
@@ -210,17 +226,34 @@ private:
 			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 		createInfo.pfnUserCallback = DebugCallback;
 	}
+	//初始化Debug监听实例
 	void SetupDebugMessenger()
 	{
 		if (!enableValidationLayers) return;
 		VkDebugUtilsMessengerCreateInfoEXT createInfo;
 		PopulateDebugMessengerCreateInfo(createInfo);
 
-		if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) 
+		if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS)
 		{
 			throw std::runtime_error("failed to set up debug messenger!");
 		}
 	}
+	//Debug回调函数
+	static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
+		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,//这里是存储信息等级，有纯信息，警告，报错
+		VkDebugUtilsMessageTypeFlagsEXT messageType,//这里存储的是行为，正常的行为，违反了规定的行为，潜在对vulkan非最优使用的行为
+		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,//细节数据
+		void* pUserData)//自定义的地方
+	{
+		if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+		{
+			std::cerr << "validation layer:" << pCallbackData->pMessage << std::endl;
+		}
+		return VK_FALSE;
+	}
+#pragma endregion
+
+#pragma region 物理设备
 	void PickPhysicalDevice()
 	{
 		uint32_t deviceCount = 0;
@@ -255,37 +288,9 @@ private:
 
 		return indices.IsComplete();
 	}
-	void InitVulkan()
-	{
-		//生成vulkan实例，并生成debug消息管理
-		CreateInstance();
-		SetupDebugMessenger();
-		//在做完vulkanInstance的相关初始化后，就需要对图形硬件做初始化，支持什么feature需要在这里声明
-		PickPhysicalDevice();
-		//创建逻辑设备
-		CreateLogicalDevice();
-	}
-	void MainLoop()
-	{
-		while (!glfwWindowShouldClose(window))
-		{
-			glfwPollEvents();
-		}
-	}
-	void Cleanup()
-	{
-		vkDestroyDevice(device, nullptr);
+#pragma endregion
 
-		if (enableValidationLayers)
-		{
-			DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
-		}
-		vkDestroyInstance(instance, nullptr);
-
-		glfwDestroyWindow(window);
-		
-		glfwTerminate();
-	}
+#pragma region 逻辑设备
 	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device)
 	{
 		QueueFamilyIndices indices;
@@ -299,9 +304,15 @@ private:
 		int i = 0;
 		for (const auto& queueFamily : queueFamilies)
 		{
+			VkBool32 presentSurpport = false;
+			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSurpport);
 			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			{
 				indices.graphicsFamily = i;
+			}
+			if (presentSurpport)
+			{
+				indices.presentFamily = i;
 			}
 			if (indices.IsComplete())
 			{
@@ -312,7 +323,6 @@ private:
 
 		return indices;
 	}
-
 	void CreateLogicalDevice()
 	{
 		QueueFamilyIndices indices = FindQueueFamilies(physicalDevice);
@@ -336,7 +346,7 @@ private:
 		//这个DeviceCreateInfo和InstanceCreateInfo同样需要拓展和debug层级信息，不同的是现在这个是针对设备的
 		//在vulkan的更新中，这里的validation layer其实已经被废弃不需要了，但是为了严谨这里还是会赋值
 		createInfo.enabledExtensionCount = 0;
-		
+
 		if (enableValidationLayers)
 		{
 			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
@@ -354,22 +364,47 @@ private:
 
 		vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
 	}
+#pragma endregion
 
-	static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
-		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,//这里是存储信息等级，有纯信息，警告，报错
-		VkDebugUtilsMessageTypeFlagsEXT messageType,//这里存储的是行为，正常的行为，违反了规定的行为，潜在对vulkan非最优使用的行为
-		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,//细节数据
-		void* pUserData)//自定义的地方
+	//窗口Objeoct
+	void CreateSurface()
 	{
-		if(messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+		if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
 		{
-			std::cerr << "validation layer:" << pCallbackData->pMessage << std::endl;
+			throw std::runtime_error("failed to create window surface!");
 		}
-		return VK_FALSE;
 	}
+
+#pragma endregion
+	
+
+	void MainLoop()
+	{
+		while (!glfwWindowShouldClose(window))
+		{
+			glfwPollEvents();
+		}
+	}
+	void Cleanup()
+	{
+		vkDestroyDevice(device, nullptr);
+
+		if (enableValidationLayers)
+		{
+			DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+		}
+		vkDestroySurfaceKHR(instance, surface, nullptr);
+		vkDestroyInstance(instance, nullptr);
+
+		glfwDestroyWindow(window);
+		
+		glfwTerminate();
+	}
+
 
 	GLFWwindow* window;
 	VkInstance instance;
+	VkSurfaceKHR surface;
 	VkDebugUtilsMessengerEXT debugMessenger;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 	VkDevice device;//其实是逻辑Device
