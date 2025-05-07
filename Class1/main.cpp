@@ -3,6 +3,7 @@
 
 #include <optional>
 #include <iostream>
+#include <set>
 #include <vector>
 #include <stdexcept>
 #include <cstdlib>
@@ -12,6 +13,10 @@ const uint32_t HEIGHT = 600;
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
+};
+
+const std::vector<const char*> deviceExtensions = {
+	VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
 
 #ifdef NDEBUG
@@ -286,7 +291,25 @@ private:
 	{
 		QueueFamilyIndices indices = FindQueueFamilies(device);
 
-		return indices.IsComplete();
+		bool extensionsSurpported = CheckDeviceExtensionSupport(device);
+
+		return indices.IsComplete() && extensionsSurpported;
+	}
+	bool CheckDeviceExtensionSupport(VkPhysicalDevice device)
+	{
+		uint32_t extensionCount;
+		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+		std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+		std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+		for (const auto& extension : availableExtensions)
+		{
+			requiredExtensions.erase(extension.extensionName);
+		}
+		return requiredExtensions.empty();
 	}
 #pragma endregion
 
@@ -326,26 +349,32 @@ private:
 	void CreateLogicalDevice()
 	{
 		QueueFamilyIndices indices = FindQueueFamilies(physicalDevice);
-
-		VkDeviceQueueCreateInfo queueCreateInfo{};
-		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
-		queueCreateInfo.queueCount = 1;
+		std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+		std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 		//queue是用于存储指令的地方，不同的queue存储不同类型的指令，那么执行需要先后顺序，所以要在这里指定它的优先级
 		float queuePriority = 1.0f;
-		queueCreateInfo.pQueuePriorities = &queuePriority;
+		for (uint32_t queueFamily : uniqueQueueFamilies)
+		{
+			VkDeviceQueueCreateInfo queueCreateInfo{};
+			queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+			queueCreateInfo.queueFamilyIndex = queueFamily;
+			queueCreateInfo.queueCount = 1;
+			queueCreateInfo.pQueuePriorities = &queuePriority;
+			queueCreateInfos.push_back(queueCreateInfo);
+		}
 
 		VkPhysicalDeviceFeatures deviceFeature{};
 
 		VkDeviceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		createInfo.pQueueCreateInfos = &queueCreateInfo;
-		createInfo.queueCreateInfoCount = 1;
+		createInfo.pQueueCreateInfos = queueCreateInfos.data();
+		createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 		createInfo.pEnabledFeatures = &deviceFeature;
 
 		//这个DeviceCreateInfo和InstanceCreateInfo同样需要拓展和debug层级信息，不同的是现在这个是针对设备的
 		//在vulkan的更新中，这里的validation layer其实已经被废弃不需要了，但是为了严谨这里还是会赋值
-		createInfo.enabledExtensionCount = 0;
+		createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+		createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
 		if (enableValidationLayers)
 		{
@@ -362,7 +391,7 @@ private:
 			throw std::runtime_error("failed to create logical device");
 		}
 
-		vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
+		vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &presentQueue);
 	}
 #pragma endregion
 
@@ -409,6 +438,7 @@ private:
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 	VkDevice device;//其实是逻辑Device
 	VkQueue graphicsQueue;
+	VkQueue presentQueue;
 };
 
 int main()
