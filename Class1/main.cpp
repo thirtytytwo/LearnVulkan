@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <limits>
 #include <algorithm>
+#include <fstream>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -26,6 +27,16 @@ const bool enableValidationLayers = false;
 #else
 const bool enableValidationLayers = true;
 #endif
+
+static std::vector<char> ReadFile(const std::string& fileName)
+{
+	std::ifstream file(fileName, std::ios::ate | std::ios::binary);
+
+	if (!file.is_open())
+	{
+		throw std::runtime_error("failed to open file!");
+	}
+}
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
 	const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
@@ -106,8 +117,10 @@ private:
 		//FB缓冲区
 		CreateSwapChain();
 		CreateImageViews();
+
+		CreateGraphicsPipeline();
 	}
-	//初始化实例6 
+	//初始化实例
 	void CreateInstance()
 	{
 		if (enableValidationLayers && !CheckValidationLayerSupport())
@@ -589,6 +602,16 @@ private:
 		}
 	}
 
+	void CreateGraphicsPipeline()
+	{
+		auto vertShaderCode = ReadFile("shaders/vert.spv");
+		auto fragShaderCode = ReadFile("shaders/frag.spv");
+	}
+
+	VkShaderModule CreateShaderModule(const std::vector<char>& code)
+	{
+
+	}
 
 #pragma endregion
 	
