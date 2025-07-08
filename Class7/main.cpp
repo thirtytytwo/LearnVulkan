@@ -870,8 +870,9 @@ private:
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &colorAttachmentResolveRef;
+		subpass.pColorAttachments = &colorAttachmentRef;
 		subpass.pDepthStencilAttachment = &depthAttachmentRef;
+		subpass.pResolveAttachments = &colorAttachmentResolveRef;
 
 		VkSubpassDependency dependency;
 		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -1348,7 +1349,7 @@ private:
 		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		imageInfo.usage = usage;
 		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageInfo.samples = samples;
 
 		if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
 		{
