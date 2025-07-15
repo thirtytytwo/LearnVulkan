@@ -1,10 +1,10 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
+#include <glm.hpp>
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include<glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include<glm.hpp>
+#include <gtc/matrix_transform.hpp>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -1831,6 +1831,25 @@ private:
 			descriptorWrites[2].pBufferInfo = &storageBufferInfoCurrentFrame;
 
 			vkUpdateDescriptorSets(device, 3, descriptorWrites.data(), 0, nullptr);
+		}
+	}
+
+	void recordComputeCommandBuffer(VkCommandBuffer commandBuffer) {
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+		if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+			throw std::runtime_error("failed to begin recording compute command buffer!");
+		}
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[currentFrame], 0, nullptr);
+
+		vkCmdDispatch(commandBuffer, PARTICLE_COUNT / 256, 1, 1);
+
+		if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+			throw std::runtime_error("failed to record compute command buffer!");
 		}
 	}
 
