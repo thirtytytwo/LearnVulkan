@@ -145,7 +145,7 @@ struct Particle
 	static VkVertexInputBindingDescription getBindingDescription()
 	{
 		VkVertexInputBindingDescription bindingDescription{};
-		bindingDescription.binding = 1;
+		bindingDescription.binding = 0;
 		bindingDescription.stride = sizeof(Particle);
 		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
@@ -156,12 +156,12 @@ struct Particle
 	{
 		std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
 
-		attributeDescriptions[0].binding = 1;
+		attributeDescriptions[0].binding = 0;
 		attributeDescriptions[0].location = 0;
 		attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
 		attributeDescriptions[0].offset = offsetof(Particle, position);
 
-		attributeDescriptions[1].binding = 1;
+		attributeDescriptions[1].binding = 0;
 		attributeDescriptions[1].location = 1;
 		attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 		attributeDescriptions[1].offset = offsetof(Particle, color);
@@ -216,7 +216,9 @@ private:
 		CreateImageViews();
 		CreateRenderPass();
 		CreateDescriptorSetLayout();
+		CreateComputeDescriptorLayout();
 		CreateGraphicsPipeline();
+		CreateComputePipeline();
 		createColorResources();
 		CreateDepthResource();
 		CreateFramebuffers();
@@ -225,12 +227,15 @@ private:
 		CreateTextureImageView();
 		CreateTextureSampler();
 		LoadModel();
+		CreateComputeCommandBuffers();
 		CreateVertexBuffer();
 		CreateIndexBuffer();
 		CreateUniformBuffer();
 		CreateDescriptorPool();
+		CreateComputeDescriptorSets();
 		CreateDescriptorSets();
 		CreateCommandBuffers();
+		CreateComputeCommandBuffers();
 		CreateSyncObjects();
 	}
 #pragma region Class 0-1
@@ -698,15 +703,15 @@ private:
 
 	void CreateGraphicsPipeline()
 	{
-		auto vertShaderCode = ReadFile("shaders/vert.spv");
-		auto fragShaderCode = ReadFile("shaders/frag.spv");
-		auto partiVertShaderCode = ReadFile("shaders/ParticleVert.spv");
-		auto partiFragShaderCode = ReadFile("shaders/ParticleFrag.spv");
+		auto vertShaderCode = ReadFile("shaders/ParticleVertShader.spv");
+		auto fragShaderCode = ReadFile("shaders/ParticleFragShader.spv");
+		//auto partiVertShaderCode = ReadFile("shaders/ParticleVert.spv");
+		//auto partiFragShaderCode = ReadFile("shaders/ParticleFrag.spv");
 
 		VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
 		VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
-		VkShaderModule partiVertShaderModule = CreateShaderModule(partiVertShaderCode);
-		VkShaderModule partiFragShaderModule = CreateShaderModule(partiFragShaderCode);
+		//VkShaderModule partiVertShaderModule = CreateShaderModule(partiVertShaderCode);
+		//VkShaderModule partiFragShaderModule = CreateShaderModule(partiFragShaderCode);
 
 		VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -720,36 +725,24 @@ private:
 		fragShaderStageInfo.module = fragShaderModule;
 		fragShaderStageInfo.pName = "main";
 
-		VkPipelineShaderStageCreateInfo partiVertShaderStageInfo{};
-		partiVertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		partiVertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-		partiVertShaderStageInfo.module = partiVertShaderModule;
-		partiVertShaderStageInfo.pName = "main";
 
-		VkPipelineShaderStageCreateInfo partiFragShaderStageInfo{};
-		partiFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		partiFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-		partiFragShaderStageInfo.module = partiFragShaderModule;
-		partiFragShaderStageInfo.pName = "main";
-
-
-		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo,  };
+		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
 		VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 		vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
 		auto vertBindingDescription = Vertex::GetBindingDescription();
 		auto partiBindDescription = Particle::getBindingDescription();
-		std::array<VkVertexInputBindingDescription, 2> bindingDescs = { vertBindingDescription, partiBindDescription };
+		std::array<VkVertexInputBindingDescription, 1> bindingDescs = { partiBindDescription };
 
 		auto vertAttributeDescriptions = Vertex::GetAttributeDescriptions();
 		auto partiAttributeDescriptions = Particle::getAttributeDescriptions();
 		std::vector<VkVertexInputAttributeDescription> attributeDescs;
-		attributeDescs.insert(attributeDescs.end(), vertAttributeDescriptions.begin(), vertAttributeDescriptions.end());
+		//attributeDescs.insert(attributeDescs.end(), vertAttributeDescriptions.begin(), vertAttributeDescriptions.end());
 		attributeDescs.insert(attributeDescs.end(), partiAttributeDescriptions.begin(), partiAttributeDescriptions.end());
 
 
-		vertexInputInfo.vertexBindingDescriptionCount = 2;
+		vertexInputInfo.vertexBindingDescriptionCount = 1;
 		vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescs.size());
 		vertexInputInfo.pVertexBindingDescriptions = bindingDescs.data();
 		vertexInputInfo.pVertexAttributeDescriptions = attributeDescs.data();

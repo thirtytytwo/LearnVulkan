@@ -13,6 +13,12 @@ layout(binding = 0) uniform UniformBufferObject {
     mat4 proj;
 } ubo;
 
+struct Particle{
+    vec2 position;
+    vec2 velocity;
+    vec4 color;
+}
+
 void main(){
     gl_Position = ubo.proj * ubo.view * ubo.model * vec4(position, 1.0);
     fragColor = color;
