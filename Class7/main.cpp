@@ -1,10 +1,10 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#include <glm.hpp>
+#include <glm/glm.hpp>
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include<glm.hpp>
-#include <gtc/matrix_transform.hpp>
+#include<glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -141,6 +141,33 @@ struct Particle
 	glm::vec2 position;
 	glm::vec2 velocity;
 	glm::vec3 color;
+
+	static VkVertexInputBindingDescription getBindingDescription()
+	{
+		VkVertexInputBindingDescription bindingDescription{};
+		bindingDescription.binding = 1;
+		bindingDescription.stride = sizeof(Particle);
+		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+		return bindingDescription;
+	}
+
+	static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
+	{
+		std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+
+		attributeDescriptions[0].binding = 1;
+		attributeDescriptions[0].location = 0;
+		attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+		attributeDescriptions[0].offset = offsetof(Particle, position);
+
+		attributeDescriptions[1].binding = 1;
+		attributeDescriptions[1].location = 1;
+		attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		attributeDescriptions[1].offset = offsetof(Particle, color);
+
+		return attributeDescriptions;
+	}
 };
 
 class VulkanClass
@@ -673,9 +700,13 @@ private:
 	{
 		auto vertShaderCode = ReadFile("shaders/vert.spv");
 		auto fragShaderCode = ReadFile("shaders/frag.spv");
+		auto partiVertShaderCode = ReadFile("shaders/ParticleVert.spv");
+		auto partiFragShaderCode = ReadFile("shaders/ParticleFrag.spv");
 
 		VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
 		VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
+		VkShaderModule partiVertShaderModule = CreateShaderModule(partiVertShaderCode);
+		VkShaderModule partiFragShaderModule = CreateShaderModule(partiFragShaderCode);
 
 		VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -689,18 +720,39 @@ private:
 		fragShaderStageInfo.module = fragShaderModule;
 		fragShaderStageInfo.pName = "main";
 
-		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+		VkPipelineShaderStageCreateInfo partiVertShaderStageInfo{};
+		partiVertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		partiVertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		partiVertShaderStageInfo.module = partiVertShaderModule;
+		partiVertShaderStageInfo.pName = "main";
+
+		VkPipelineShaderStageCreateInfo partiFragShaderStageInfo{};
+		partiFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		partiFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		partiFragShaderStageInfo.module = partiFragShaderModule;
+		partiFragShaderStageInfo.pName = "main";
+
+
+		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo,  };
 
 		VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 		vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-		auto bindingDescription = Vertex::GetBindingDescription();
-		auto attributeDescriptions = Vertex::GetAttributeDescriptions();
+		auto vertBindingDescription = Vertex::GetBindingDescription();
+		auto partiBindDescription = Particle::getBindingDescription();
+		std::array<VkVertexInputBindingDescription, 2> bindingDescs = { vertBindingDescription, partiBindDescription };
 
-		vertexInputInfo.vertexBindingDescriptionCount = 1;
-		vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-		vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-		vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+		auto vertAttributeDescriptions = Vertex::GetAttributeDescriptions();
+		auto partiAttributeDescriptions = Particle::getAttributeDescriptions();
+		std::vector<VkVertexInputAttributeDescription> attributeDescs;
+		attributeDescs.insert(attributeDescs.end(), vertAttributeDescriptions.begin(), vertAttributeDescriptions.end());
+		attributeDescs.insert(attributeDescs.end(), partiAttributeDescriptions.begin(), partiAttributeDescriptions.end());
+
+
+		vertexInputInfo.vertexBindingDescriptionCount = 2;
+		vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescs.size());
+		vertexInputInfo.pVertexBindingDescriptions = bindingDescs.data();
+		vertexInputInfo.pVertexAttributeDescriptions = attributeDescs.data();
 
 		VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
 		inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -969,9 +1021,12 @@ private:
 
 	void CreateSyncObjects()
 	{
+		
 		imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 		renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+		computeSemaphore.resize(MAX_FRAMES_IN_FLIGHT);
 		inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+		computeFence.resize(MAX_FRAMES_IN_FLIGHT);
 
 		VkSemaphoreCreateInfo semaphoreInfo{};
 		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -984,6 +1039,8 @@ private:
 		{
 			if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
 				vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
+				vkCreateSemaphore(device, &semaphoreInfo, nullptr, &computeSemaphore[i]) != VK_SUCCESS||
+				vkCreateFence(device, &fenceInfo, nullptr, &computeFence[i]) != VK_SUCCESS ||
 				vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS)
 			{
 				throw std::runtime_error("failed to create synchronization objects for a frame!");
@@ -1834,7 +1891,7 @@ private:
 		}
 	}
 
-	void recordComputeCommandBuffer(VkCommandBuffer commandBuffer) {
+	void RecordComputeCommandBuffer(VkCommandBuffer commandBuffer) {
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
@@ -1850,6 +1907,22 @@ private:
 
 		if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
 			throw std::runtime_error("failed to record compute command buffer!");
+		}
+	}
+
+	void CreateComputeCommandBuffers()
+	{
+		computeCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.commandPool = commandPool;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandBufferCount = (uint32_t)computeCommandBuffers.size();
+
+		if (vkAllocateCommandBuffers(device, &allocInfo, computeCommandBuffers.data()) != VK_SUCCESS)
+		{
+			throw std::runtime_error("failed to allocate compute command buffers");
 		}
 	}
 
@@ -1941,8 +2014,28 @@ private:
 
 	void DrawFrame()
 	{
-		vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+		VkSubmitInfo submitInfo{};
+		vkWaitForFences(device, 1, &computeFence[currentFrame], VK_TRUE, UINT64_MAX);
 
+		UpdateUniformBuffer(currentFrame);
+
+		vkResetFences(device, 1, &computeFence[currentFrame]);
+
+		vkResetCommandBuffer(computeCommandBuffers[currentFrame], 0);
+		RecordComputeCommandBuffer(computeCommandBuffers[currentFrame]);
+
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &computeCommandBuffers[currentFrame];
+		submitInfo.signalSemaphoreCount = 1;
+		submitInfo.pSignalSemaphores = &computeSemaphore[currentFrame];
+
+		if (vkQueueSubmit(computeQueue, 1, &submitInfo, computeFence[currentFrame]) != VK_SUCCESS)
+		{
+			throw std::runtime_error("failed to submit compute command buffer!");
+		}
+
+		vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
 		uint32_t imageIndex;
 		VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
@@ -1962,11 +2055,11 @@ private:
 		vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 		RecordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
-		VkSubmitInfo submitInfo{};
+		VkSemaphore waitSemaphores[] = { computeSemaphore[currentFrame], imageAvailableSemaphores[currentFrame]};
+		VkPipelineStageFlags waitStage[] = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+		submitInfo = {};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
-		VkPipelineStageFlags waitStage[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-		submitInfo.waitSemaphoreCount = 1;
+		submitInfo.waitSemaphoreCount = 2;
 		submitInfo.pWaitSemaphores = waitSemaphores;
 		//这个和前面的waitsemaphores是要绑在一起的
 		submitInfo.pWaitDstStageMask = waitStage;
@@ -2137,6 +2230,9 @@ private:
 	std::vector<VkDescriptorSet> computeDescriptorSets;
 	VkPipelineLayout computePipelineLayout;
 	VkPipeline computePipeline;
+	std::vector<VkCommandBuffer> computeCommandBuffers;
+	std::vector<VkSemaphore> computeSemaphore;
+	std::vector<VkFence> computeFence;
 };
 
 int main()
